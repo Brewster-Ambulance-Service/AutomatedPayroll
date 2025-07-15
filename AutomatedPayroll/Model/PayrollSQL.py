@@ -81,7 +81,8 @@ class punch_discrepancies(Base):
                 f"punchout_early={self.punchout_early}, punchout_late={self.punchout_late}, "
                 f"punchin_form_incomplete={self.punchin_form_incomplete}, "
                 f"punchout_form_incomplete={self.punchout_form_incomplete})>")
-    
+
+#enum class for the false and true values for the disabled column as specified in the data dictionary
 class statusEnum(PyEnum):
     true = 'deactive'
     false = 'active'
@@ -112,7 +113,8 @@ cutoff_date = date.today() - timedelta(days=60)
 
 """
 Querying the database to get the combined data from users, timecard_punches, and shift_assignments tables.
-This query retrieves user information, punch details, shift assignments, and calculates total hours worked for each user in the last 60 days."""
+This query retrieves user information, punch details, shift assignments, and calculates total hours worked for each user in the last 60 days.
+"""
 combined = session.query(
     users.user_id,
     func.concat(users.first_name, literal(' '), users.last_name).label('name'),
