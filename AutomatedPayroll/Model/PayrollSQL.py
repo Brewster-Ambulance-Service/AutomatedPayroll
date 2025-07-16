@@ -115,6 +115,8 @@ cutoff_date = date.today() - timedelta(days=60)
 Querying the database to get the combined data from users, timecard_punches, and shift_assignments tables.
 This query retrieves user information, punch details, shift assignments, and calculates total hours worked for each user in the last 60 days.
 """
+from sqlalchemy import asc  # Optional, for clarity
+
 combined = session.query(
     users.user_id,
     func.concat(users.first_name, literal(' '), users.last_name).label('name'),
@@ -136,7 +138,7 @@ combined = session.query(
     )
 ).filter(
     users.disabled == 'false',
-    timecard_punches.date_line >= cutoff_date  # ✅ Filter added here
+    timecard_punches.date_line >= cutoff_date
 ).group_by(
     users.user_id,
     users.first_name,
@@ -148,7 +150,11 @@ combined = session.query(
     shift_assignments.start_time,
     shift_assignments.end_time,
     shift_assignments.comments
+).order_by(
+    shift_assignments.start_time.asc()  # ✅ Order by added here
 ).all()
+
+
 """
 formats the punch data into a more readable format, converting dates and times to strings and handling null values.
 This is useful for displaying the data in a user-friendly manner, such as in a report or a user interface.
