@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Date, CHAR, Numeric, Text, ForeignKey, create_engine, func, literal, and_
+from sqlalchemy import Column, Integer, String, DateTime, Date, CHAR, Numeric, Text, ForeignKey, create_engine, func, literal, and_, literal_column
 from sqlalchemy.orm import declarative_base, sessionmaker
 from enum import Enum as PyEnum
 from sqlalchemy.types import Enum as SQLEnum
@@ -24,10 +24,10 @@ class timecard_punches(Base):
     date_line = Column(Date)
     start_time = Column(DateTime)
     end_time = Column(DateTime)
-    type = Column(String(40))
-    deleted = Column(CHAR(1))
+    type = Column(String(40)) #delete later
+    deleted = Column(CHAR(1)) #delete later
     user_id = Column(Integer, ForeignKey('user_id'))
-    pay_period_id = Column(Integer)
+    pay_period_id = Column(Integer) #delete later 
     total_hours = Column(Numeric(10,2))
     shift_assignment_id = Column(Integer, ForeignKey('sched_template_shift_assignments.id'))
 
@@ -66,13 +66,13 @@ class punch_discrepancies(Base):
     user_id = Column(Integer, ForeignKey('user_id'))
     timesheet_id = Column(Integer, ForeignKey(''))
     shift_assignment_id = Column(Integer, ForeignKey('sched_template_shift_assignments.id'))
-    punchout_ts = Column(Integer)
-    punchin_early = Column(Integer)
-    punchin_late = Column(Integer)
-    punchout_early = Column(Integer)
-    punchout_late = Column(Integer)
-    punchin_form_incomplete = Column(Integer)
-    punchout_form_incomplete = Column(Integer)
+    # punchout_ts = Column(Integer) #delete later
+    # punchin_early = Column(Integer) #delete later
+    # punchin_late = Column(Integer) #delete later
+    # punchout_early = Column(Integer) #delete later
+    # punchout_late = Column(Integer) #deleter later
+    # punchin_form_incomplete = Column(Integer) #delete later
+    # punchout_form_incomplete = Column(Integer) #delete later
 
     def __repr__(self):
         return (f"<punch_discrepancies(id={self.id}, user_id={self.user_id}, timesheet_id={self.timesheet_id}, "
@@ -96,8 +96,8 @@ class users(Base):
 
     user_id = Column(Integer, primary_key=True)
     disabled = Column(SQLEnum(statusEnum), default=statusEnum.false, nullable=False)
-    deactivated = Column(Integer)
-    termination_date = Column(CHAR)
+    deactivated = Column(Integer) #delete later
+    termination_date = Column(CHAR) #delete laerer
     first_name = Column(String)
     last_name = Column(String)
 
@@ -109,7 +109,7 @@ class users(Base):
     
 
 #cutsoff the data results to only the last 60 days to avoid pulling too much data and slowing down the query
-cutoff_date = date.today() - timedelta(days=60)
+cutoff_date = date.today() - timedelta(days=30)
 
 """
 Querying the database to get the combined data from users, timecard_punches, and shift_assignments tables.
@@ -127,7 +127,17 @@ combined = session.query(
     shift_assignments.start_time.label('shift_start'),
     shift_assignments.end_time.label('shift_end'),
     func.sum(timecard_punches.total_hours).label('total_hours'),
-    shift_assignments.comments.label('shift_comments')
+    shift_assignments.comments.label('shift_comments'),
+
+    # 🔥 Add shift duration in hours as float
+    (
+        func.timestampdiff(
+            literal_column('SECOND'),
+            shift_assignments.start_time,
+            shift_assignments.end_time
+        ) / 3600.0
+    ).label('scheduled_shift_hours')
+
 ).join(
     timecard_punches, users.user_id == timecard_punches.user_id
 ).join(
@@ -151,7 +161,7 @@ combined = session.query(
     shift_assignments.end_time,
     shift_assignments.comments
 ).order_by(
-    shift_assignments.start_time.asc()  # ✅ Order by added here
+    shift_assignments.start_time.asc()
 ).all()
 
 
@@ -170,9 +180,21 @@ formatted_combined = [
         'shift_start': r.shift_start.strftime('%Y-%m-%d %H:%M:%S') if r.shift_start else None,
         'shift_end': r.shift_end.strftime('%Y-%m-%d %H:%M:%S') if r.shift_end else None,
         'total_hours': float(r.total_hours) if r.total_hours else 0.0,
+        'scheduled_shift_hours': float(r.scheduled_shift_hours) if r.scheduled_shift_hours else 0.0,
         'comments': r.shift_comments
     }
     for r in combined
+]
+
+discrepancies = [
+    {
+        'user_id': d.user_id,
+        'name': d.name,
+        'date': d.punch_date.strftime('%Y-%m-%d') if d.punch_date else None,
+        'shift_assignment_id': d.shift_assignment_id,
+        'discrepancy': d.scheduled_shift_hours - d.total_hours if d.scheduled_shift_hours and d.total_hours else None,
+    }
+    for d in combined
 ]
 # Uncomment the following lines to print the formatted results
 # for a in formatted_combined:
@@ -183,6 +205,13 @@ def get_formatted_combined():
     This function can be used to retrieve the processed data for further operations or reporting.
     """
     return formatted_combined
+
+def get_discrepancies():
+    """
+    Retrieves punch discrepancies from the user_punch_discrepancies table.
+    This function can be used to identify discrepancies in employee punch times.
+    """
+    return discrepancies
 
 
 """
