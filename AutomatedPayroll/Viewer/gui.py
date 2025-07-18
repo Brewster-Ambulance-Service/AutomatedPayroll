@@ -1,21 +1,53 @@
+# Imports
+
 from nicegui import ui
 
-# --- Dropdown + Download Button ---
-with ui.row().classes('w-full justify-between items-center'):
-    time_filter = ui.select(
-        options=['Day', 'Week', 'Month'],
-        value='Week',
-        label='Time Range'
-    )
-    ui.button('Download CSV', on_click=lambda: print('Connect backend CSV here'))
+
+        
+class ToggleButton(ui.button):
+
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            self._state = False
+            self.on('click', self.toggle)
+
+        def toggle(self) -> None:
+            """Toggle the button state."""
+            self._state = not self._state
+            self.update()
+
+        def update(self) -> None:
+            self.props(f'color={"green" if self._state else "red"}')
+            super().update()
+"""
+Toggle Anomalies
+"""
 
 
-# print('rows loading...')
-# print([
-#     {'name': 'John Doe', 'pay_period': '00287', 'date': '07/19/25', 'reason': 'Forgot to clock out', 'flag': 'Red'},
-#     {'name': 'Jane Smith', 'pay_period': '00287', 'date': '07/20/25', 'reason': 'Overpaid (not IFT)', 'flag': 'Yellow'}
-# ])
-# --- Table With Dummy Data (Fixed) ---
+
+with ui.header().classes('justify-center').props('height-hint=100') as header:
+    with ui.tabs() as tabs:
+       
+        brewster=ui.image('BrewsterTwo.png').classes('w-64')
+
+"""
+Brewster png banner
+"""
+
+        
+        
+with ui.button_group():
+    with ui.row().classes('w-full justify-between items-center'):
+        with ui.dropdown_button('Pay Periods', auto_close=True):
+            ui.item('Item 1')
+            ui.item('Item 2')
+        ui.button('Download CSV', on_click=lambda: print('Connect backend CSV here'))
+        ToggleButton('Anomalies')
+
+"""
+Grouping together buttons
+"""
+
 ui.table(
     columns=[
         {'name': 'name', 'label': 'Name', 'field': 'name', 'required': True, 'sortable': True},
@@ -30,27 +62,31 @@ ui.table(
             'pay_period': '00287',
             'date': '07/19/25',
             'reason': 'Forgot to clock out',
-            'flag': 'Red'
+            'flag': '🔴'
         },
         {
             'name': 'Jane Smith',
             'pay_period': '00287',
             'date': '07/20/25',
             'reason': 'Overpaid (not IFT)',
-            'flag': 'Yellow'
-        }
+            'flag': '🟡'
+        },
+        {
+            'name': 'Mark Brewster',
+            'pay_period': '12345',
+            'date': '08/25/27',
+            'reason': 'No error occured',
+            'flag': '🟢'
+        }    
     ]
 )
 
+""" 
+Dummy Data
+"""
 
 
 
-
-# --- Flag Legend ---
-with ui.row().classes('mt-6 gap-4'):
-    ui.label('Red: High confidence error detected').style('color: #cc4444; font-weight: bold')
-    ui.label('Yellow: Moderate confidence error detected').style('color: #d6a300; font-weight: bold')
-
-# --- Native App Launch ---
+# Launch in native app
 if __name__ in {"__main__", "__mp_main__"}:
-    ui.run(native=True)
+    ui.run(native=True, title = 'Brewster Finance')
