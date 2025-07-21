@@ -1,6 +1,7 @@
 # Imports
 
 from nicegui import ui
+from datetime import datetime, timedelta
 
 
         
@@ -34,19 +35,30 @@ with ui.header().classes('justify-center').props('height-hint=100') as header:
 Brewster png banner
 """
 
-        
-        
+def pay_periods_3months():
+    #Using datetime find today, find where saturday is, and 
+    today = datetime.today()
+    #List Saturday at 5
+    days_since_saturday = (today.weekday() + 2) % 7  
+    last_saturday = today - timedelta(days=days_since_saturday)
+    # Make a list of dates
+    pay_periods = []
+    for i in range(12):
+        end_date = last_saturday - timedelta(weeks=i)
+        start_date = end_date - timedelta(days=6)
+        pay_period = f'{start_date.strftime("%m/%d/%y")} - {end_date.strftime("%m/%d/%y")}'
+        pay_periods.append(pay_period)
+    return pay_periods
+
+
+pay_periods = pay_periods_3months()
 with ui.button_group():
     with ui.row().classes('w-full justify-between items-center'):
         with ui.dropdown_button('Pay Periods', auto_close=True):
-            ui.item('Item 1')
-            ui.item('Item 2')
+            for period in pay_periods:
+                ui.item(period)
         ui.button('Download CSV', on_click=lambda: print('Connect backend CSV here'))
         ToggleButton('Anomalies')
-
-"""
-Grouping together buttons
-"""
 
 ui.table(
     columns=[
@@ -84,7 +96,6 @@ ui.table(
 """ 
 Dummy Data
 """
-
 
 
 # Launch in native app
