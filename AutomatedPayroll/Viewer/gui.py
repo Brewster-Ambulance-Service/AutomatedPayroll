@@ -1,6 +1,10 @@
 # Imports
 from nicegui import ui
 from datetime import datetime, timedelta
+from nicegui import app
+
+
+
 
 """
 Initalizes and centers the Brewster EMS banner to the center of the banner/header at height 100
@@ -8,6 +12,7 @@ Initalizes and centers the Brewster EMS banner to the center of the banner/heade
 with ui.header().classes('justify-center').props('height-hint=100') as header:
     with ui.tabs() as tabs:
         brewster=ui.image('BrewsterTwo.png').classes('w-64')
+        
 
 """
 Dynamic method created to find out the past 4 weeks (month) of pay periods
@@ -32,16 +37,31 @@ def pay_periods_month():
     return pay_periods
 
 
+
 """
 Created pay_periods to group the pay period dropdown lsit and as well the ability to download the data as a CSV file
 """
+
 pay_periods = pay_periods_month()
 with ui.button_group():
     with ui.row().classes('w-full justify-between items-center'):
-        with ui.dropdown_button('Pay Periods', auto_close=True):
-            for period in pay_periods:
-                ui.item(period)
-        ui.button('Download CSV', on_click=lambda: print('Connect backend CSV here'))
+        selected_period = {'value': pay_periods[0]}  
+
+        #Pay Period Button
+        ui.label('Pay Period').classes('text-sm font-semibold')
+        ui.select(
+            options=pay_periods,
+            value=selected_period['value'],
+            with_input=True,
+            on_change=lambda e: selected_period.update({'value': e.value})
+            ).classes('w-55')
+           
+        
+
+        # CSV Button
+        ui.button('Download CSV', on_click=lambda: print('Connect backend CSV here')).classes('w-40') 
+        ui.button("Search", on_click=lambda: print('Connect backend to search')).classes('w-30')
+
 
 
 """"
