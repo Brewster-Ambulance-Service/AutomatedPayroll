@@ -30,9 +30,11 @@ class timecard_punches(Base):
     start_time = Column(DateTime)
     end_time = Column(DateTime)
     user_id = Column(Integer, ForeignKey('user_id'))
-    pay_period_id = Column(Integer) #delete later 
+    pay_period_id = Column(Integer)
     total_hours = Column(Numeric(10,2))
     shift_assignment_id = Column(Integer, ForeignKey('sched_template_shift_assignments.id'))
+    # cost_center_id = Column(Integer, ForeignKey('cost_center.id'))
+    # earning_code_id = Column(Integer, ForeignKey('earning_code.id'))
 
     def __repr__(self):
         return (f"<PayrollArchiveTimecardPunches(id={self.id}, date_line={self.date_line}, "
@@ -54,6 +56,9 @@ class shift_assignments(Base):
     date_line = Column(Date)
     start_time = Column(DateTime)
     end_time = Column(DateTime)
+    earning_code_id = Column(Integer, ForeignKey('earning_code.id'))
+    cost_center_id = Column(Integer, ForeignKey('cost_center.id'))
+    # pay_period_id = Column(Integer, ForeignKey('pay_period.id'))
 
     def __repr__(self):
         return (f"<shift_assignments(id={self.id}, user_id={self.user_id} comments={repr(self.comments)}, date_line={self.date_line}, "
@@ -75,6 +80,17 @@ class punch_discrepancies(Base):
     def __repr__(self):
         return (f"<punch_discrepancies(id={self.id}, user_id={self.user_id}, timesheet_id={self.timesheet_id}, "
                 f"shift_assignment_id={self.shift_assignment_id})>")
+    
+    class timecards(Base):
+        '"Mapping for the timecards table from the SQL database, with the relevant variable names that we will be using from the table'
+
+        __tablename__ = 'sched_timecards'
+        id = Column(Integer, primary_key=True)
+        user_id = Column(Integer, ForeignKey('user_id'))
+        total_hours = Column(Numeric(10,2))
+
+        def __repr__(self):
+            return (f"<timecards(id={self.id}, user_id={self.user_id}, total_hours={self.total_hours})>")
 
 
 #enum class for the false and true values for the disabled column as specified in the data dictionary
@@ -116,7 +132,6 @@ def load_cache():
             return pickle.load(f)
     return {
         'formatted': None,
-        'discrepancies': None,
         'date': None
     }
 
@@ -126,8 +141,11 @@ def save_cache(cache):
         pickle.dump(cache, f)
 
 #initalizes the cache 
+
 _daily_cache = load_cache()
 
+#uncomment this line to force reset the cache to see c
+# _daily_cache['date'] = date(2000, 1, 1)
 
 def get_data():
     """
@@ -148,10 +166,14 @@ def get_data():
             func.concat(users.first_name, literal(' '), users.last_name).label('name'),
             timecard_punches.shift_assignment_id,
             timecard_punches.date_line.label('punch_date'),
-            timecard_punches.start_time.label('punch_start'),
-            timecard_punches.end_time.label('punch_end'),
-            shift_assignments.start_time.label('shift_start'),
-            shift_assignments.end_time.label('shift_end'),
+            # timecard_punches.start_time.label('punch_start'),
+            # timecard_punches.end_time.label('punch_end'),
+            # shift_assignments.start_time.label('shift_start'),
+            # shift_assignments.end_time.label('shift_end'),
+            shift_assignments.cost_center_id,
+            shift_assignments.earning_code_id,
+            shift_assignments.pay_period_id,
+            timecard_punches.pay_period_id,
             func.sum(timecard_punches.total_hours).label('total_hours'),
             shift_assignments.comments.label('shift_comments'),
             (
@@ -178,11 +200,14 @@ def get_data():
             users.last_name,
             timecard_punches.shift_assignment_id,
             timecard_punches.date_line,
-            timecard_punches.start_time,
-            timecard_punches.end_time,
-            shift_assignments.start_time,
-            shift_assignments.end_time,
-            shift_assignments.comments
+            timecard_punches.pay_period_id,
+            timecard_punches.earning_code_id,
+            shift_assignments.cost_center_id,
+            # timecard_punches.start_time,
+            # timecard_punches.end_time,
+            # shift_assignments.start_time,
+            # shift_assignments.end_time,
+            # shift_assignments.comments
         ).order_by(
             shift_assignments.start_time.asc()
         ).all()
@@ -190,37 +215,31 @@ def get_data():
         #proper formatting to make it easier to work with the combined data 
         formatted_combined = [
             {
-                'user_id': r.user_id,
+                # 'user_id': r.user_id,
                 'name': r.name,
-                'shift_assignment_id': r.shift_assignment_id,
+                # 'shift_assgnment_id': r.shift_assignment_id,
                 'date': r.punch_date.strftime('%Y-%m-%d') if r.punch_date else None,
-                'punch_start': r.punch_start.strftime('%Y-%m-%d %H:%M:%S') if r.punch_start else None,
-                'punch_end': r.punch_end.strftime('%Y-%m-%d %H:%M:%S') if r.punch_end else None,
-                'shift_start': r.shift_start.strftime('%Y-%m-%d %H:%M:%S') if r.shift_start else None,
-                'shift_end': r.shift_end.strftime('%Y-%m-%d %H:%M:%S') if r.shift_end else None,
+                # 'punch_start': r.punch_start.strftime('%Y-%m-%d %H:%M:%S') if r.punch_start else None,
+                # 'punch_end': r.punch_end.strftime('%Y-%m-%d %H:%M:%S') if r.punch_end else None,
+                # 'shift_start': r.shift_start.strftime('%Y-%m-%d %H:%M:%S') if r.shift_start else None,
+                # 'shift_end': r.shift_end.strftime('%Y-%m-%d %H:%M:%S') if r.shift_end else None,
+                # 'earning_code_id': r.earning_code_id if hasattr(r, 'earning_code_id') else None,
+                # 'cost_center_id': r.cost_center_id if hasattr(r, 'cost_center_id') else None,
+                'pay_period_id': r.pay_period_id if hasattr(r, 'cost_center_id') else None,
                 'total_hours': float(r.total_hours) if r.total_hours else 0.0,
                 'scheduled_shift_hours': float(r.scheduled_shift_hours) if r.scheduled_shift_hours else 0.0,
-                'comments': r.shift_comments
+                'discrepancy': float(r.scheduled_shift_hours) - float(r.total_hours)
+                   if r.scheduled_shift_hours and r.total_hours else None,
+
+                # 'comments': r.shift_comments
             }
             for r in combined
         ]
 
         #formatting the discrepancies data so that it is easier to work with and better laid out 
-        discrepancies = [
-            {
-                'user_id': d.user_id,
-                'name': d.name,
-                'date': d.punch_date.strftime('%Y-%m-%d') if d.punch_date else None,
-                'shift_assignment_id': d.shift_assignment_id,
-                'discrepancy': float(d.scheduled_shift_hours) - float(d.total_hours)
-                    if d.scheduled_shift_hours and d.total_hours else None,
-            }
-            for d in combined
-        ]
 
         #initalizes and saves the cache to avoid re-querying the database unnecessarily
         _daily_cache['formatted'] = formatted_combined
-        _daily_cache['discrepancies'] = discrepancies
         _daily_cache['date'] = today
 
         save_cache(_daily_cache)
@@ -241,32 +260,18 @@ def get_formatted_combined_df():
     df = pd.DataFrame(formatted)
 
     # Ensure 'date' is datetime for filtering
-    if not df.empty:
-        df['date'] = pd.to_datetime(df['date'], errors='coerce')
-        df['punch_start'] = pd.to_datetime(df['punch_start'], errors='coerce')
-        df['punch_end'] = pd.to_datetime(df['punch_end'], errors='coerce')
-        df['shift_start'] = pd.to_datetime(df['shift_start'], errors='coerce')
-        df['shift_end'] = pd.to_datetime(df['shift_end'], errors='coerce')
+    # if not df.empty:
+    #     df['date'] = pd.to_datetime(df['date'], errors='coerce')
+    #     df['punch_start'] = pd.to_datetime(df['punch_start'], errors='coerce')
+    #     df['punch_end'] = pd.to_datetime(df['punch_end'], errors='coerce')
+    #     df['shift_start'] = pd.to_datetime(df['shift_start'], errors='coerce')
+    #     df['shift_end'] = pd.to_datetime(df['shift_end'], errors='coerce')
 
     return df
 
-
-def get_discrepancies_df():
-    """
-    Returns the discrepancy data as a pandas DataFrame.
-    """
-    _, discrepancies = get_data()
-    df = pd.DataFrame(discrepancies)
-
-    # Convert 'date' to datetime format
-    if not df.empty:
-        df['date'] = pd.to_datetime(df['date'], errors='coerce')
-
-    return df
 
 # Now you can work with formatted and discrepancies as neede
-print(get_formatted_combined_df())
-print(get_discrepancies_df())
+# print(get_formatted_combined_df())
 
 """
 This files purpose is to complete the schema and initalization of the important database tables for Automation of Payroll. Allowing for easy querying and data searching through 

@@ -1,8 +1,15 @@
 from datetime import datetime
-from PayrollSQL import get_formatted_combined, get_discrepancies
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import pandas as pd
 
+from Model.PayrollSQL import get_data
+
+
+
 class PayrollAutomation:
+
     """
     Class dedicated to automating the payroll process and finding outliers in shift and payroll data
     acquired from the PayrollSQL module.
@@ -12,13 +19,13 @@ class PayrollAutomation:
         """
         Initializes the PayrollAutomation class and loads shift and error data into DataFrames.
         """
-        # Load data from PayrollSQL functions
-        shift_data = get_formatted_combined()
-        error_data = get_discrepancies()
+        #load data using the first element of the tuple holding the shift data and the second elemeny holding the discrepancy data
+        shift_data = get_data()[0]
+        self.anomalies = ['Forgot to clock out', 'Clocked out 90 min early', 'Shift is 4 hours longer than scheduled', 
+                          'Shift punch is different than crew members']
 
-        # Convert to DataFrames
+        # Convert and load into pandas dataframes
         self.shift_data_df = pd.DataFrame(shift_data)
-        self.error_data_df = pd.DataFrame(error_data)
 
         # Ensure 'date' column is parsed as datetime
         if not self.shift_data_df.empty:
@@ -26,13 +33,8 @@ class PayrollAutomation:
 
         pd.set_option('display.max_rows', None)
 
-    def get_employee(self, name):
-        """
-        Retrieves shift data for a specific employee by name.
-        """
-        employee_data = self.shift_data_df[self.shift_data_df['name'] == name]
-        return employee_data if not employee_data.empty else None
 
+    #Filters shift data to those specified between 2 dates
     def get_pay_period(self, start_date, end_date):
         """
         Filters shift data to a specified pay period between two dates.
@@ -42,30 +44,73 @@ class PayrollAutomation:
             (self.shift_data_df['date'] <= pd.to_datetime(end_date))
         ]
         return pay_period_data if not pay_period_data.empty else None
+    
 
-    # Example outlier detection (optional)
-    # def find_outliers(self):
-    #     outliers = self.shift_data_df[
-    #         (self.shift_data_df['total_hours'] > 12) |
-    #         (self.shift_data_df['total_hours'] < 0.5)
-    #     ]
-    #     return outliers if not outliers.empty else None
+    #filters the data solely to those who have anomalies in punches
+    def get_discrepancies(self, pay_period_data):
+        """
+        Identifies discrepancies in the pay period data.
+        Discrepancies are defined as shifts where the total hours worked
+        differ significantly from the scheduled shift hours.
+        """
+        if pay_period_data is None or pay_period_data.empty:
+            return None
+        
+        # Calculate discrepancies
+        discrepancies = pay_period_data[
+            (pay_period_data['discrepancy'].abs() > 1)  # Threshold for discrepancy detection
+             ]
+        return discrepancies if not discrepancies.empty else None
+    
+    
+    def punch_anomaly(self, row):
+        if(row['earning_code_id'] == 53 or row['earning_code_id'] == 58)and 126 <= row['cost_center_id'] <= 135:
+            return 'ALS/IFT earning code assigned to 911 cost center'
+        if row['discrepancy'] >= 1.5:
+            return 'Clocked out at least 90 minutes early'
+        elif row['discrepancy'] < -10.0:
+            return 'Forgot to clock out for at least 10 hours'
+        elif row['discrepancy'] < -4.0 and row['discrepancy'] >= -10.0:
+            return 'Shift is at least 4 hours longer than scheduled'
+        else:
+            return 'No anomaly'
+        
+    def get_punch_issues(self, df):
+    
+        df = df.copy()  # Avoid SettingWithCopyWarning
+        df['anomaly'] = df.apply(self.punch_anomaly, axis=1)
+        return df
+    
+        
 
+    def get_partner_punchout():
 
-# Example usage
-if __name__ == "__main__":
-    payroll = PayrollAutomation()
+        """
+        Placeholder for future implementation to get partner punch-out data.
+        Currently not implemented.
+        """
+        raise NotImplementedError("Partner punch-out functionality is not yet implemented.")
+    
+    def get_anomaly_table(self, start_date=None, end_date=None):
+      """
+        Returns a DataFrame containing anomalies in shift data.
+        """ 
+      get_pay_period = self.get_pay_period(start_date, end_date)
+      get_anomalies = self.get_discrepancies(get_pay_period)
+      get_anomaly = self.get_punch_issues(get_anomalies)
+      
+      return get_anomaly 
 
-    # Print all discrepancies
-    print("\nDiscrepancies:")
-    print(payroll.error_data_df)
+ 
+# # # Example usage
+# if __name__ == "__main__":
+#     payroll = PayrollAutomation()
 
-    # Uncomment to test pay period
-    # start = datetime(2025, 6, 30)
-    # end = datetime(2025, 7, 15)
-    # pay_period_data = payroll.get_pay_period(start, end)
-    # print(pay_period_data if pay_period_data is not None else "No data found.")
+# get_pay_period = payroll.get_pay_period('2025-07-03', '2025-07-24')
+# # print("Pay Period Data:")
+# # print(get_pay_period)
 
-    # Uncomment to test employee
-    # result = payroll.get_employee('Mark Brewster')
-    # print(result if result is not None else "Employee not found.")
+# get_anomalies = payroll.get_discrepancies(get_pay_period)
+# print("Anomalies in Shift Data:")
+# get_anomaly = payroll.get_punch_issues(get_anomalies)
+# print(get_anomaly.sort_values(by='shift_assignment_id', ascending=True))
