@@ -49,37 +49,42 @@ Created pay_periods to group the pay period dropdown lsit and as well the abilit
 """
 
 pay_periods = pay_periods_month()
+with ui.button_group():
+    with ui.row().classes('w-full justify-between items-center'):
+        selected_period = {'value': pay_periods[0]}  
 
-selected_period = {'value': pay_periods[0]}  
-
-with ui.column().classes('w-full'):
-    # Top bar with select and buttons
-    with ui.row().classes('w-full justify-between items-center mb-4'):
+        #Pay Period Button
         ui.label('Pay Period').classes('text-sm font-semibold')
         ui.select(
             options=pay_periods,
             value=selected_period['value'],
             with_input=True,
             on_change=lambda e: selected_period.update({'value': e.value})
-        ).classes('w-60')
+            ).classes('w-60')
+        
 
-        ui.button('Download CSV', on_click=lambda: print('Connect backend CSV here')).classes('w-40')
-        ui.button("Search", on_click=lambda: on_search_click()).classes('w-40')
+        
 
-    table_container = ui.column().classes('w-full h-full')
+        table_container = ui.column().classes('w-full h-full')
 
-def get_selected_period():
-    return selected_period['value']
+        def on_search_click():
+            dates = get_selected_period()
+            start_date, end_date = dates.split(' - ')
+            df = pa.get_anomaly_table(start_date, end_date)
+    
+            table_container.clear()
+            with table_container:
+                ui.table.from_pandas(df).classes('w-full h-full').props('striped bordered hoverable')
 
-def on_search_click():
-    dates = get_selected_period()
-    start_date, end_date = dates.split(' - ')
-    df = pa.get_anomaly_table(start_date, end_date)
+        def get_selected_period():
+            return selected_period['value']
 
-    table_container.clear()
-    with table_container:
-        ui.table.from_pandas(df).classes('w-full h-full').props('striped bordered hoverable')
+           
+        
 
+        # CSV Button
+        ui.button('Download CSV', on_click=lambda: print('Connect backend CSV here')).classes('w-40') 
+        ui.button("Search", on_click=on_search_click).classes('w-40')
 
 
 

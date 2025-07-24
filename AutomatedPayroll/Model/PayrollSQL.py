@@ -161,56 +161,46 @@ def get_data():
         cutoff_date = today - timedelta(days=40)
 
         #Advanced query that properly joins and filters the data from the users, timecard_punches, and shift_assignments tables
+        punches_subq = session.query(
+            timecard_punches.user_id,
+            timecard_punches.date_line,
+            timecard_punches.shift_assignment_id,
+            func.sum(timecard_punches.total_hours).label('total_hours')
+            ).group_by(
+            timecard_punches.user_id,
+            timecard_punches.date_line,
+            timecard_punches.shift_assignment_id
+            ).subquery()
+
         combined = session.query(
             users.user_id,
             func.concat(users.first_name, literal(' '), users.last_name).label('name'),
-            timecard_punches.shift_assignment_id,
-            timecard_punches.date_line.label('punch_date'),
-            # timecard_punches.start_time.label('punch_start'),
-            # timecard_punches.end_time.label('punch_end'),
-            # shift_assignments.start_time.label('shift_start'),
-            # shift_assignments.end_time.label('shift_end'),
+            punches_subq.c.shift_assignment_id,
+            punches_subq.c.date_line.label('punch_date'),
             shift_assignments.cost_center_id,
             shift_assignments.earning_code_id,
             shift_assignments.pay_period_id,
-            timecard_punches.pay_period_id,
-            func.sum(timecard_punches.total_hours).label('total_hours'),
+            punches_subq.c.total_hours,
             shift_assignments.comments.label('shift_comments'),
             (
-                func.timestampdiff(
-                    literal_column('SECOND'),
-                    shift_assignments.start_time,
-                    shift_assignments.end_time
-                ) / 3600.0
+            func.timestampdiff(
+            literal_column('SECOND'),
+            shift_assignments.start_time,
+            shift_assignments.end_time
+            ) / 3600.0
             ).label('scheduled_shift_hours')
-        ).join(
-            timecard_punches, users.user_id == timecard_punches.user_id
-        ).join(
-            shift_assignments,
-            and_(
-                users.user_id == shift_assignments.user_id,
-                timecard_punches.date_line == shift_assignments.date_line
-            )
-        ).filter(
+            ).join(
+            punches_subq, punches_subq.c.shift_assignment_id == shift_assignments.id
+            ).join(
+            users, users.user_id == punches_subq.c.user_id
+            ).filter(
             users.disabled == 'false',
-            timecard_punches.date_line >= cutoff_date
-        ).group_by(
-            users.user_id,
-            users.first_name,
-            users.last_name,
-            timecard_punches.shift_assignment_id,
-            timecard_punches.date_line,
-            timecard_punches.pay_period_id,
-            timecard_punches.earning_code_id,
-            shift_assignments.cost_center_id,
-            # timecard_punches.start_time,
-            # timecard_punches.end_time,
-            # shift_assignments.start_time,
-            # shift_assignments.end_time,
-            # shift_assignments.comments
-        ).order_by(
+            punches_subq.c.date_line >= cutoff_date
+            ).order_by(
             shift_assignments.start_time.asc()
-        ).all()
+            ).all()
+
+        
 
         #proper formatting to make it easier to work with the combined data 
         formatted_combined = [
@@ -268,6 +258,48 @@ def get_formatted_combined_df():
     #     df['shift_end'] = pd.to_datetime(df['shift_end'], errors='coerce')
 
     return df
+
+
+
+
+def print_total_hours_by_user_date():
+    # Query total_hours grouped by user_id, date, and user name
+    results = session.query(
+        users.user_id,
+        func.concat(users.first_name, literal(' '), users.last_name).label('name'),
+        timecard_punches.date_line,
+        func.sum(timecard_punches.total_hours).label('total_hours')
+    ).join(
+        timecard_punches, users.user_id == timecard_punches.user_id
+    ).filter(
+        timecard_punches.date_line >= cutoff_date
+    ).group_by(
+        users.user_id,
+        timecard_punches.date_line,
+        users.first_name,
+        users.last_name
+    ).order_by(
+        timecard_punches.date_line.asc(),
+        users.user_id.asc()
+    ).all()
+
+    # Create DataFrame
+    df = pd.DataFrame(results, columns=['user_id', 'name', 'date', 'total_hours'])
+    
+    # Convert date to string for cleaner print
+    df['date'] = df['date'].astype(str)
+    
+    # Show full dataframe in console without truncation
+    pd.set_option('display.max_rows', None)
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.width', 1000)
+    pd.set_option('display.colheader_justify', 'center')
+    pd.set_option('display.precision', 2)
+    
+    print(df)
+
+# Call the function to print the data
+print_total_hours_by_user_date()
 
 
 # Now you can work with formatted and discrepancies as neede
