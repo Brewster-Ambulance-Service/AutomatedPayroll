@@ -1,8 +1,21 @@
 from datetime import datetime, timedelta
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import pandas as pd
+
+# Ensure compatibility with PyInstaller for relative imports
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS  # Set by PyInstaller during runtime
+    except AttributeError:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+# Add the parent directory of this script to the path if needed
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(script_dir, '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from Model.PayrollSQL import export
 
@@ -24,11 +37,9 @@ class PayrollAutomation:
             'Shift punch is different than crew members'
         ]
 
-        # Convert to DataFrame if it's not already
         self.shift_data_df = pd.DataFrame(shift_data)
 
         if not self.shift_data_df.empty:
-            # Parse 'date_line' and create 'date' alias
             self.shift_data_df['date_line'] = pd.to_datetime(self.shift_data_df['date_line'], errors='coerce')
             self.shift_data_df['date'] = self.shift_data_df['date_line']
 
@@ -61,25 +72,21 @@ class PayrollAutomation:
         """
         if row['actual_hours'] == 0:
             return 'Did not punch in/PTO'
-        
+
         if (row['earning_code_id'] in [53, 58]) and (126 <= row['cost_center_id'] <= 135):
             return 'ALS/IFT earning code assigned to 911 cost center'
-        
-        # Underworked: clocked out early
+
         if row['discrepancy'] <= -1.5:
             return 'Clocked out at least 90 minutes early'
-        
-        # Overworked: forgot to clock out
+
         elif row['discrepancy'] >= 10.0:
             return 'Forgot to clock out for at least 10 hours'
-        
-        # Overworked: extended shift (but not 10+ hours)
+
         elif 4.0 <= row['discrepancy'] < 10.0:
             return 'Shift is at least 4 hours longer than scheduled'
-        
+
         else:
             return 'No anomaly'
-
 
     def get_punch_issues(self, df):
         """
@@ -98,7 +105,7 @@ class PayrollAutomation:
         if anomalies is not None:
             return self.get_punch_issues(anomalies)
         return None
-    
+
     def filter_24_hours(self, start_date, end_date):
         """
         Drops:
@@ -106,38 +113,18 @@ class PayrollAutomation:
         - Rows with 'No anomaly' as the anomaly type
         """
         df = self.get_anomaly_table(start_date, end_date)
-        
-        # Keep all rows except 24hr shifts without the specific anomaly
+        if df is None or df.empty:
+            return None
+
         filtered_df = df[~(
             (df['scheduled_hours'] >= 23) &
-            (df['anomaly'] != 'ALS/IFT earning code assigned to a 911 cost center')
+            (df['anomaly'] != 'ALS/IFT earning code assigned to 911 cost center')
         )]
-        
-        # Further drop rows with 'No anomaly'
-        filtered_df = filtered_df[filtered_df['anomaly'] != 'No anomaly']
 
-        # filtered_df =  self.get_anomaly_table(start_date, end_date)
+        filtered_df = filtered_df[filtered_df['anomaly'] != 'No anomaly']
         return filtered_df
 
-    
+
 if __name__ == "__main__":
     payroll = PayrollAutomation()
-
-# get_pay_period =  payroll.get_pay_period('2025-07-03', '2025-07-04')
-# # print(get_pay_period)
-
-# get_anomalies = payroll.get_discrepancies(get_pay_period)
-# print("Anomalies in shift data")
-# get_anomaly = payroll.get_punch_issues(get_anomalies)
-# print(get_anomaly)
-# print(get_anomaly.sort_values(by='date_line', ascending = True))
-
-# # Define pay period (last 14 days)
-# end_date = datetime.today().date()
-# start_date = end_date - timedelta(days=10)
-# df = payroll.shift_data_df
-# payroll.get_pay_period("2025-07-24"," 2025-07-25")
-# print(df)
-
-# Get the anomaly table
-# anomaly_df = payroll.get_anomaly_table(start_date=start_date, end_date=end_date)
+    print(payroll.shift_data_df.head())  # Optional test output

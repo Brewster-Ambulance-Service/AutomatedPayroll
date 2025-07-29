@@ -9,6 +9,19 @@ from datetime import date, timedelta
 import pandas as pd
 import os
 import pickle
+import sys
+
+# === Add for PyInstaller compatibility ===
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+# === Use this for cache access ===
+CACHE_FILE = resource_path("TEST_cache.pkl")
+# CSV_FILE = resource_path("TEST.csv")  # Optional
 
 # Database connection
 DATABASE_URL = "mysql+pymysql://powerbi:7mNWGrMXmguXXYPiUVaqz3Rlc-7bacV@10.25.8.81:3306/traumasoft_brewster"
@@ -17,7 +30,7 @@ Session = sessionmaker(bind=engine)
 session = Session()
 Base = declarative_base()
 
-# Models
+# Database models
 class timecard_punches(Base):
     __tablename__ = 'payroll_archive_timecard_punches'
     id = Column(Integer, primary_key=True)
@@ -49,10 +62,7 @@ class shifts(Base):
     start_time = Column(DateTime)
     end_time = Column(DateTime)
 
-# Cache config
-CACHE_FILE = "TEST_cache.pkl"
-CSV_FILE = "TEST.csv"
-# pickle.dump({"date": "2000-01-01", "data": []}, open("TEST_cache.pkl", "wb"))
+# === Cache management ===
 if not os.path.exists(CACHE_FILE):
     pickle.dump({"date": "2000-01-01", "data": []}, open(CACHE_FILE, "wb"))
 
@@ -76,15 +86,15 @@ def load_cache():
         cache = pickle.load(f)
     return pd.DataFrame(cache["data"])
 
+# === Data export ===
 def export():
     if is_cache_fresh():
-        print("📦 Using cached data...")
+        print("Using cached data...")
         df = load_cache()
     else:
-        print("⏳ Querying fresh data from database...")
+        print("Querying fresh data from database...")
         cutoff_date = date.today() - timedelta(days=40)
 
-        # Aggregate shifts: get earliest start_time and latest end_time per user/date
         shift_subq = (
             session.query(
                 shifts.user_id,
@@ -118,7 +128,6 @@ def export():
 
         df = pd.read_sql(query.statement, engine)
 
-        # Compute scheduled_hours and discrepancy in Pandas
         df['scheduled_hours'] = (
             pd.to_datetime(df['scheduled_end']) - pd.to_datetime(df['scheduled_start'])
         ).dt.total_seconds() / 3600
@@ -127,11 +136,9 @@ def export():
 
         save_cache(df)
 
-    # df.to_csv(CSV_FILE, index=False)
-    # print(f"✅ Data exported to {CSV_FILE}")
-    print("✅ Data export complete (returned as DataFrame)")
+    print("Data export complete (returned as DataFrame)")
     return df
 
-
-# Run it
-export()
+# Optional: Run standalone
+if __name__ == "__main__":
+    export()
