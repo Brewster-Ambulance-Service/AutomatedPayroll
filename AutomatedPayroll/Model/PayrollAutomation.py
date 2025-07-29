@@ -34,7 +34,6 @@ class PayrollAutomation:
             'Forgot to clock out',
             'Clocked out 90 min early',
             'Shift is 4 hours longer than scheduled',
-            'Shift punch is different than crew members'
         ]
 
         self.shift_data_df = pd.DataFrame(shift_data)
@@ -123,6 +122,22 @@ class PayrollAutomation:
 
         filtered_df = filtered_df[filtered_df['anomaly'] != 'No anomaly']
         return filtered_df
+    
+    def filter_anomaly(self, anomaly, start_date, end_date):
+        """
+        Filters results by specific anomalies that the user provides.
+        If 'All' is selected, return all anomalies.
+        """
+        df = self.filter_24_hours(start_date, end_date)
+        if df is None or df.empty:
+            return None
+
+        if anomaly == 'All':
+            return df  # No filtering if 'All' is selected
+        
+        filtered_df = df[df['anomaly'] == anomaly]
+        return filtered_df
+
 
 
 if __name__ == "__main__":
