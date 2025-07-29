@@ -1,104 +1,98 @@
-# Imports
-from nicegui import ui,  events
+# gui.py
+
+from nicegui import ui
 from datetime import datetime, timedelta
 import sys
 import os
-import tempfile
-import shutil
-from io import StringIO
 from pathlib import Path
-import tempfile
 
-# Append project paths for import
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# === For PyInstaller-compatible resource access ===
+def resource_path(relative_path):
+    """Get absolute path to resource (works for dev and PyInstaller)."""
+    try:
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+# Append parent directory to path for importing Model
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from Model.PayrollAutomation import PayrollAutomation
 
-ui.add_head_html('''
-<style>
-    table.nicegui-table tbody tr:nth-child(odd) {
-    background-color: #f9f9f9;
-    }
-    table.nicegui-table tbody tr:nth-child(even) {
-    background-color: #ffffff;
-    }
-</style>
-''')
-
-"""
-Initializes and centers the Brewster EMS banner to the center of the banner/header at height 100
-"""
+# Initialize
 pa = PayrollAutomation()
 dates = []
 dataframe = []
 
-# Header and logo
-with ui.header().classes('justify-center').props('height-hint=100') as header:
+# === UI Header with logo ===
+with ui.header().classes('justify-center').props('height-hint=100'):
     with ui.tabs():
-        brewster = ui.image('BrewsterTwo.png').classes('w-64')
+        try:
+            image_path = resource_path('BrewsterTwo.png')
+            if not os.path.exists(image_path):
+                raise FileNotFoundError(f"Image not found at: {image_path}")
+            ui.image(image_path).classes('w-64')
+        except Exception as e:
+            ui.label(f"Failed to load logo: {e}").classes("text-red-500 text-sm")
 
-"""
-Dynamic method created to find out the past 4 weeks (month) of pay periods
-Initialized the date, created value for Saturday, and the Saturday before
-Created structure for entire week, and iterated through dates in MonthDayYear format
-Returned these days as a list
-"""
+# === Pay period generator ===
 def pay_periods_month():
-    # Using datetime to find today and find where Saturday is
     today = datetime.today()
-    # List Saturday at 5
-    days_since_saturday = (today.weekday() + 2) % 7  
+    days_since_saturday = (today.weekday() + 2) % 7
     last_saturday = today - timedelta(days=days_since_saturday)
 
-    # Pay periods for the last 4 full weeks (Saturday to Friday)
     pay_periods = []
     for i in range(4):
         end_date = last_saturday - timedelta(weeks=i)
         start_date = end_date - timedelta(days=6)
-        pay_period = f'{start_date.strftime("%Y-%m-%d")} - {end_date.strftime("%Y-%m-%d")}'
-        pay_periods.append(pay_period)
+        pay_periods.append(f'{start_date:%Y-%m-%d} - {end_date:%Y-%m-%d}')
 
-    # Add current partial pay period from last Saturday to today at the start
-    current_partial_period = f'{last_saturday.strftime("%Y-%m-%d")} - {today.strftime("%Y-%m-%d")}'
-    pay_periods.insert(0, current_partial_period)
-
-    # Return the list of dates
+    pay_periods.insert(0, f'{last_saturday:%Y-%m-%d} - {today:%Y-%m-%d}')
     return pay_periods
 
-"""
-Created pay_periods to group the pay period dropdown list and 
-as well the ability to download the data as a CSV file
-"""
 pay_periods = pay_periods_month()
-selected_period = {'value': pay_periods[0]}  
+selected_period = {'value': pay_periods[0]}
 
+# === Download handler ===
 def on_download_click():
     dates = get_selected_period()
     start_date, end_date = dates.split(' - ')
-    df = pa.filter_24_hours(start_date, end_date)
+    anomaly = get_filter()
+    # df = pa.filter_24_hours(start_date, end_date)
+    df = pa.filter_anomaly(anomaly, start_date, end_date)
 
     if df is not None and not df.empty:
         export_df = df.drop(columns=[
             'id', 'earning_code_id', 'cost_center_id',
             'date', 'discrepancy', 'scheduled_start', 'scheduled_end'
         ], errors='ignore')
-        downloads_path = str(Path.home() / "Downloads")
         filename = f'anomaly_report_{start_date}_{end_date}.csv'
-        full_path = os.path.join(downloads_path, filename)
+        full_path = os.path.join(str(Path.home() / "Downloads"), filename)
         export_df.to_csv(full_path, index=False)
-        ui.notify(f'✅ CSV saved at: {full_path}')
+        ui.notify(f'CSV saved at: {full_path}')
     else:
         ui.notify("No data to export", type="warning")
 
+# === Search handler ===
+def on_search_click():
+    dates = get_selected_period()
+    anomaly = get_filter()
+    start_date, end_date = dates.split(' - ')
+    # df = pa.filter_24_hours(start_date, end_date)
+    df = pa.filter_anomaly(anomaly, start_date, end_date)
+    df.drop(columns=['id', 'earning_code_id', 'cost_center_id', 'date', 'discrepancy', 'scheduled_start', 'scheduled_end'], inplace=True)
+    table_container.clear()
+    with table_container:
+        if df is not None and not df.empty:
+            ui.table.from_pandas(df).classes('w-full max-h-[70vh] overflow-auto').props('striped bordered hoverable dense wrap-cells')
+        else:
+            ui.label("No anomalies found for this pay period.").classes("text-red-700 font-semibold")
 
-# Container to hold the whole app body
+# === UI layout ===
 with ui.column().classes('w-full p-4 gap-4'):
-
-    # --- Top Control Bar (Always stays at the top) ---
     with ui.row().classes('w-full justify-between items-center'):
-        
-        # Pay Period Button
+        # === Pay Period Dropdown ===
         ui.label('Pay Period').classes('text-sm font-semibold')
         ui.select(
             options=pay_periods,
@@ -107,43 +101,33 @@ with ui.column().classes('w-full p-4 gap-4'):
             on_change=lambda e: selected_period.update({'value': e.value})
         ).classes('w-60')
 
-        # CSV and Search Buttons
-        ui.button('Download CSV', on_click=lambda:on_download_click()).classes('w-40') 
-        ui.button("Search", on_click=lambda: on_search_click()).classes('w-40')
+        # === Department Dropdown ===
+        anomalies = ['All','Shift is at least 4 hours longer than scheduled', 'Forgot to clock out for at least 10 hours', 'Clocked out at least 90 minutes early', 'ALS/IFT earning code assigned to 911 cost center',
+                       'Did not punch in/PTO']
+        selected_anomaly = {'value': anomalies[0]}
+        ui.label('Anomaly').classes('text-sm font-semibold')
+        ui.select(
+            options=anomalies,
+            value=selected_anomaly['value'],
+            with_input=True,
+            on_change=lambda e: selected_anomaly.update({'value': e.value})
+        ).classes('w-60')
 
-    """
-    Table container for displaying the data output
-    This is updated dynamically after clicking 'Search'
-    """
+        # === Buttons ===
+        ui.button('Download CSV', on_click=on_download_click).classes('w-40')
+        ui.button("Search", on_click=on_search_click).classes('w-40')
+
+
     table_container = ui.column().classes('w-full h-full')
 
-    """
-    Get the selected pay period and return it in date format
-    """
+
+
     def get_selected_period():
         return selected_period['value']
+    
+    def get_filter():
+        return selected_anomaly['value']
 
-    """
-    On Search Click, use selected pay period to get filtered data from PayrollAutomation,
-    then display that data in a responsive, styled table.
-    """
-    def on_search_click():
-        dates = get_selected_period()
-        start_date, end_date = dates.split(' - ')
-        df = pa.filter_24_hours(start_date, end_date)
-        df.drop(columns=['id', 'earning_code_id', 'cost_center_id', 'date', 'discrepancy', 'scheduled_start', 'scheduled_end'], inplace=True)
-        table_container.clear()
-        with table_container:
-            if df is not None and not df.empty:
-                # Responsive, scrollable, and striped table
-               ui.table.from_pandas(df).classes(
-                    'nicegui-table w-full max-h-[70vh] overflow-auto'
-                ).props(
-                    'bordered hoverable dense wrap-cells'
-                )
-
-            else:
-                ui.label("No anomalies found for this pay period.").classes("text-red-700 font-semibold")
-# Run the app
+# === App launcher ===
 if __name__ in {"__main__", "__mp_main__"}:
-    ui.run(native=True, title='Brewster Finance')
+    ui.run(native=False, title='Brewster Finance')
