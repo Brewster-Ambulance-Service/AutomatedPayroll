@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, DateTime, Date, Numeric, ForeignKey,
+    TEXT, Column, Integer, String, DateTime, Date, Numeric, ForeignKey, Text,
     create_engine, and_, func
 )
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -8,6 +8,7 @@ from enum import Enum as PyEnum
 from datetime import date, timedelta
 import pandas as pd
 import os
+
 import pickle
 import sys
 
@@ -40,8 +41,9 @@ class timecard_punches(Base):
     user_id = Column(Integer, ForeignKey('users.user_id'))
     pay_period_id = Column(Integer)
     earning_code_id = Column(Integer)
-    cost_center_id = Column(Integer)
+    cost_center_id = Column(Integer, ForeignKey('cost_centers.id'))
     total_hours = Column(Numeric(10, 2))
+    # division_id = Column(Integer)
 
 class statusEnum(PyEnum):
     true = 'deactive'
@@ -53,6 +55,9 @@ class users(Base):
     disabled = Column(SQLEnum(statusEnum), default=statusEnum.false, nullable=False)
     first_name = Column(String)
     last_name = Column(String)
+    # user_division = Column(Text)
+    supervisor_id = Column(Integer)
+    # user_division = Column(Text)
 
 class shifts(Base):
     __tablename__ = 'sched_template_shift_assignments'
@@ -61,7 +66,14 @@ class shifts(Base):
     date_line = Column(Date)
     start_time = Column(DateTime)
     end_time = Column(DateTime)
+    division_id = Column(Integer)
 
+class cost_centers(Base):
+    __tablename__ = 'cost_centers'
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+
+# pickle.dump({"date": "2000-01-01", "data": []}, open(CACHE_FILE, "wb"))
 # === Cache management ===
 if not os.path.exists(CACHE_FILE):
     pickle.dump({"date": "2000-01-01", "data": []}, open(CACHE_FILE, "wb"))
@@ -86,6 +98,7 @@ def load_cache():
         cache = pickle.load(f)
     return pd.DataFrame(cache["data"])
 
+
 # === Data export ===
 def export():
     if is_cache_fresh():
@@ -99,6 +112,7 @@ def export():
             session.query(
                 shifts.user_id,
                 shifts.date_line,
+                shifts.division_id,
                 func.min(shifts.start_time).label("scheduled_start"),
                 func.max(shifts.end_time).label("scheduled_end")
             )
@@ -113,6 +127,7 @@ def export():
                 timecard_punches.date_line,
                 timecard_punches.earning_code_id,
                 timecard_punches.cost_center_id,
+                cost_centers.name.label("cost_center_name"),  # Added line
                 timecard_punches.pay_period_id,
                 timecard_punches.total_hours.label("actual_hours"),
                 shift_subq.c.scheduled_start,
@@ -123,6 +138,7 @@ def export():
                 shift_subq.c.user_id == timecard_punches.user_id,
                 shift_subq.c.date_line == timecard_punches.date_line
             ))
+            .outerjoin(cost_centers, timecard_punches.cost_center_id == cost_centers.id)  # Join cost_centers
             .filter(timecard_punches.date_line >= cutoff_date)
         )
 
@@ -139,6 +155,4 @@ def export():
     print("Data export complete (returned as DataFrame)")
     return df
 
-# Optional: Run standalone
-if __name__ == "__main__":
-    export()
+
