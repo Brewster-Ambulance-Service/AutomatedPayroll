@@ -136,14 +136,18 @@ class PayrollAutomation:
         df = self.get_anomaly_table(start_date, end_date)
         if df is None or df.empty:
             return None
-
-        filtered_df = df[~(
+        
+        condition = (
             (df['scheduled_hours'] >= 23) &
+            (df['actual_hours'] > 11) & (df['actual_hours'] < 13) &
             (df['anomaly'] != 'ALS/IFT earning code assigned to 911 cost center')
-        )]
+        )
+        filtered_df = df[~condition]
 
         filtered_df = filtered_df[filtered_df['anomaly'] != 'No anomaly']
+
         return filtered_df
+        # return df
     
     def filter_anomaly(self, anomaly, start_date, end_date):
         """
@@ -192,13 +196,13 @@ class PayrollAutomation:
         if center == 'All':
             return df
 
-        # Get all known cost center IDs
-        all_known_ids = {id for ids in self.Divisions.values() for id in ids}
+        # # Get all known cost center IDs
+        # all_known_ids = {id for ids in self.Divisions.values() for id in ids}
 
-        if division == 'Other':
-            df = df[~df['cost_center_id'].isin(all_known_ids)]
-        else:
-            df = df[df['cost_center_id'].isin(self.Divisions[division])]
+        # if division == 'Other':
+        #     df = df[~df['cost_center_id'].isin(all_known_ids)]
+        # else:
+        #     df = df[df['cost_center_id'].isin(self.Divisions[division])]
 
         # Filter by cost_center_name
         return df[df['cost_center_name'] == center]
@@ -294,19 +298,19 @@ class PayrollAutomation:
 
 
 
-# if __name__ == "__main__":
-#     payroll = PayrollAutomation()
-#     dashboard_df = payroll.create_dashboard("2025-07-01", "2025-07-08")
-#     with pd.option_context('display.max_columns', None, 'display.expand_frame_repr', False):
-#      print(dashboard_df)
+if __name__ == "__main__":
+    payroll = PayrollAutomation()
+    dashboard_df = payroll.create_dashboard("2025-07-01", "2025-07-08")
+    with pd.option_context('display.max_columns', None, 'display.expand_frame_repr', False):
+     print(dashboard_df)
 
 
-# payroll = PayrollAutomation()
+payroll = PayrollAutomation()
 
-# division_name = 'Division 2'
-# division_centers = payroll.get_cost_centers(division_name)
-# print(f"Cost centers for {division_name}:")
-# print(division_centers)
+division_name = 'Division 2'
+division_centers = payroll.get_cost_centers(division_name)
+print(f"Cost centers for {division_name}:")
+print(division_centers)
 
 
     # dashboard_df = self.create_dashboard("2025-07-01", "2025-07-15")
